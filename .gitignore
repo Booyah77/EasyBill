@@ -13,3 +13,34 @@ captures/
 # JVM crash diagnostics
 *.hprof
 hs_err_pid*.log
+
+# Personal AI development history (keep locally)
+.trellis/workspace/
+.trellis/tasks/
+docs/superpowers/
+
+# Local service credentials and signing material
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties
+key.properties
+
+# Private ledger databases, exports and backups
+personal-ledger.db
+personal-ledger.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+personal-ledger.csv
+personal-ledger.json
+/exports/
+/backups/
+/private-data/
