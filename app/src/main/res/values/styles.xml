@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.PersonalLedger.Base" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#356B5B</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F5F3EB</item>
+        <item name="android:navigationBarColor">#1D2924</item>
+    </style>
+    <style name="Theme.PersonalLedger" parent="Theme.PersonalLedger.Base" />
+</resources>

@@ -1,0 +1,15 @@
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+gradle-app.setting
+captures/
+.DS_Store
+
+# Local permission diagnostics and recovery records
+.trellis/permission-recovery/
+
+# JVM crash diagnostics
+*.hprof
+hs_err_pid*.log

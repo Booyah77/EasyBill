@@ -1,0 +1,10 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "AGENTS.md", "reason": "Check project constraints, encoding, and coding rules"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review cross-layer data and format boundaries"}
+{"file": ".trellis/tasks/10-16-personal-android-bookkeeping/research/android-architecture.md", "reason": "Review Android architecture and compatibility choices"}
+{"file": ".trellis/tasks/10-16-personal-android-bookkeeping/research/import-sources.md", "reason": "Review the import scope and file format assumptions"}
+{"file": ".trellis/tasks/10-16-personal-android-bookkeeping/research/sync-options.md", "reason": "Review Git sync and credential handling assumptions"}
+{"file": ".trellis/tasks/10-16-personal-android-bookkeeping/research/ui-patterns.md", "reason": "Review visual direction references"}
+{"file": ".trellis/spec/backend/ledger-sync-contract.md", "reason": "Review import, Room, and manual Git sync contracts"}
+{"file": ".trellis/tasks/10-16-personal-android-bookkeeping/research/ai-bookkeeping.md", "reason": "Verify AI boundary validation, privacy, existing categories and batch retry behavior"}
+{"file": ".trellis/spec/backend/ai-bookkeeping-contract.md", "reason": "Verify implemented AI signatures, failure matrix and tests against the executable contract"}

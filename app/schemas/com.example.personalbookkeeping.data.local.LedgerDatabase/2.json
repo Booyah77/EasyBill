@@ -1,0 +1,153 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "768fcb1bca2b0e1bf06db796a5d6c5a5",
+    "entities": [
+      {
+        "tableName": "ledger_entries",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `type` TEXT NOT NULL, `amountFen` INTEGER NOT NULL, `currency` TEXT NOT NULL, `date` TEXT NOT NULL, `category` TEXT NOT NULL, `note` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `updatedAt` TEXT NOT NULL, `deletedAt` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountFen",
+            "columnName": "amountFen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "object_sync_record_states",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`storageId` TEXT NOT NULL, `recordId` TEXT NOT NULL, `revisionId` TEXT NOT NULL, PRIMARY KEY(`storageId`, `recordId`))",
+        "fields": [
+          {
+            "fieldPath": "storageId",
+            "columnName": "storageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordId",
+            "columnName": "recordId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionId",
+            "columnName": "revisionId",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "storageId",
+            "recordId"
+          ]
+        }
+      },
+      {
+        "tableName": "object_sync_conflicts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`storageId` TEXT NOT NULL, `recordId` TEXT NOT NULL, `revisionId` TEXT NOT NULL, `revisionJson` TEXT NOT NULL, PRIMARY KEY(`storageId`, `recordId`, `revisionId`))",
+        "fields": [
+          {
+            "fieldPath": "storageId",
+            "columnName": "storageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordId",
+            "columnName": "recordId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionId",
+            "columnName": "revisionId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionJson",
+            "columnName": "revisionJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "storageId",
+            "recordId",
+            "revisionId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '768fcb1bca2b0e1bf06db796a5d6c5a5')"
+    ]
+  }
+}

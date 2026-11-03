@@ -1,1 +1,90 @@
-# easy_bill
+# 个人记账
+
+支持可选的手动 S3 兼容对象存储同步。Git 和对象存储分别配置、分别手动同步；不配置时仍可离线记账。
+
+对象存储使用私有 Bucket 和限定前缀的读、列举、写权限。每次修改写成不可变修订对象，并保留删除标记；发生并发修改时需要明确选择版本。远端修订暂不自动清理，详细配置见 [对象存储同步说明](docs/object-storage-sync.md)。
+
+Android 个人记账应用，支持本地收支记录、可配置的 AI 文字记账、固定格式 CSV/JSON 导入导出，以及可选的手动 Git 同步。
+
+## 当前范围
+
+- 快速记录收入和支出，查看、编辑、删除流水和当月汇总。
+- 从总览进入 AI 记账，一段文字识别多笔收支，整批校验通过后自动保存并展示明细。
+- CSV/JSON 使用应用约定的字段格式；导出文件可重新导入。
+- 导入先校验整份文件，存在错误时不会部分写入；重复记录会跳过并汇总。
+- 不配置 Git 远端时只使用本地数据。配置后由用户手动同步。
+- 微信支付和支付宝原始账单解析、自动同步和登录服务暂不包含。
+
+## AI 文字记账
+
+1. 在总览点击“AI 记账”，或在设置点击“配置大模型”。填写自己的 API Key；默认服务为 `https://api.deepseek.com`，模型为 `deepseek-flash`。地址和模型均可修改。
+2. 支持提供 JSON 输出的 OpenAI Chat Completions 兼容 HTTPS 服务。地址可填基础地址、带 `/v1` 的地址，或完整的 `/chat/completions` 地址；例如 `https://api.openai.com/v1`，并填写该服务实际提供的模型名。地址不能含账号、查询参数或片段，服务重定向不会跟随。
+3. 输入文字后点击“识别并记账”。例如 `鸡腿10元晚上吃饭20手机壳10元` 应保存三笔支出：餐饮 10 元（鸡腿）、餐饮 20 元（晚上吃饭）、购物 10 元（手机壳），总计 40 元。结果页面显示每笔日期、类型、分类、金额和项目备注，可到流水更正。
+
+没有明确日期时使用发起请求时的本地日期，没有明确收入时按支出处理，只支持人民币。分类使用对应收支类型的默认分类和已有自定义分类；未知分类归入“其他”。金额以十进制字符串严格转换为整数分，超过两位小数、无效日期、空结果或任意一笔无效时整批不保存。每次最多输入 6000 字符、识别 100 笔，识别期间可以取消。
+
+API Key 使用独立的 Android Keystore 密钥加密保存在本机，不进入账目、导出或同步文件。修改设置时 Key 留空可保留同一服务地址的现有 Key；更换地址必须重新输入。打开设置不会丢失账单草稿，Key 不写入页面恢复状态。
+
+点击识别会把本段文字、可用分类名称和请求日期发送给所配置的服务，可能产生 API 费用；历史流水和备注不会上传。只有官方 DeepSeek 地址会附带关闭 thinking 的参数。应用不会自动重试网络请求；本地保存失败时使用“重试保存本次结果”，复用同一批 ID，避免重复写入。待保存批次保留在当前进程中，进程重建时恢复草稿并回到空闲状态。
+
+模型可能误解文字或遗漏项目，结构校验无法保证语义完全正确。请核对保存后的明细，必要时在流水中编辑或删除。
+
+## 导入文件格式
+
+CSV 使用 UTF-8 编码，导入时可带或不带 BOM。表头必须与下列字段顺序完全一致：
+
+```csv
+id,type,amount,currency,date,category,note,createdAt,updatedAt
+```
+
+JSON 使用 schema version 1，记录字段与 CSV 相同，但 `currency` 位于文件顶层：
+
+```json
+{
+  "schemaVersion": 1,
+  "currency": "CNY",
+  "exportedAt": "2026-10-16T08:00:00Z",
+  "records": [
+    {
+      "id": "7f95f61e-2df6-4e71-908f-dfe1bd23e4d1",
+      "type": "EXPENSE",
+      "amount": "12.50",
+      "date": "2026-10-16",
+      "category": "餐饮",
+      "note": "午餐",
+      "createdAt": "2026-10-16T08:00:00Z",
+      "updatedAt": "2026-10-16T08:00:00Z"
+    }
+  ]
+}
+```
+
+金额必须是两位小数，类型为 `INCOME` 或 `EXPENSE`，日期使用 `YYYY-MM-DD`，时间戳使用 ISO-8601。导入先校验整份文件；发现格式错误时不会写入任何记录。重复记录会跳过并汇总。
+
+## 工具链
+
+- JDK 17
+- Gradle 9.6.0 或支持 Android Gradle Plugin 9.4.0 的 Android Studio
+- Android SDK Platform 37
+- Android SDK Build Tools 36.0.0
+- Git sync uses JGit 5.13.5 for a Java 8 runtime baseline. Confirm it on an Android device before relying on sync.
+
+项目附带 Gradle Wrapper。初次启动可在 Android Studio 选择 `app` 运行配置和一个已启动的模拟器或连接的手机，再点击绿色运行按钮。命令行构建使用 Android Studio 配置的 Gradle JDK 和 Android SDK：
+
+## 构建
+
+安装并配置好上述工具链后，在项目根目录运行：
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest
+.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:lintDebug
+```
+
+Debug APK 输出到 `app/build/outputs/apk/debug/app-debug.apk`。
+
+AI 的 JVM 单元测试使用假配置、假客户端和假仓储，不需要真实 Key 或联网调用。测试覆盖示例拆分、精确金额、整批拒绝无效记录、配置及 API 错误、分类校验、取消并发和稳定保存重试。
+
+## Git 同步
+
+在应用设置中配置 HTTPS Git 远端、用户名、访问令牌和分支。建议使用专门的私有仓库保存账目。同步只在点击“立即同步”后执行；遇到同一条记录的冲突时，应用会保留双方版本并请用户选择。
