@@ -18,7 +18,7 @@ import kotlin.coroutines.coroutineContext
 enum class AiPhase { IDLE, RECOGNIZING, SAVING }
 
 sealed interface AiBookkeepingResult {
-    data class Saved(val entries: List<LedgerEntry>, val commit: ImportCommitResult) : AiBookkeepingResult
+    data class Saved(val batchId: String, val entries: List<LedgerEntry>, val commit: ImportCommitResult) : AiBookkeepingResult
     data class Failed(val failure: AiFailure, val canRetrySave: Boolean = false) : AiBookkeepingResult
     data object Busy : AiBookkeepingResult
 }
@@ -32,7 +32,9 @@ class AiBookkeepingManager(
     private val newId: () -> String = { UUID.randomUUID().toString() }
 ) {
     private val operation = Mutex()
-    private var pendingBatch: List<LedgerEntry>? = null
+    private data class PendingBatch(val id: String, val savedAt: Instant, val entries: List<LedgerEntry>)
+
+    private var pendingBatch: PendingBatch? = null
     val hasPendingSave: Boolean get() = pendingBatch != null
 
     suspend fun recognizeAndSave(text: String, onPhase: (AiPhase) -> Unit = {}): AiBookkeepingResult {
@@ -63,7 +65,7 @@ class AiBookkeepingManager(
                 decoder.decode(response, categories, Instant.now(clock), newId)
             }
             coroutineContext.ensureActive()
-            pendingBatch = recognized.toList()
+            pendingBatch = PendingBatch(newId(), Instant.now(clock), recognized.toList())
             return savePending(onPhase)
         } catch (exception: CancellationException) {
             throw exception
@@ -92,9 +94,9 @@ class AiBookkeepingManager(
         onPhase(AiPhase.SAVING)
         return try {
             coroutineContext.ensureActive()
-            val commit = repository.importEntries(batch)
+            val commit = repository.saveAiBatch(batch.id, batch.savedAt, batch.entries)
             pendingBatch = null
-            AiBookkeepingResult.Saved(batch, commit)
+            AiBookkeepingResult.Saved(batch.id, batch.entries, commit)
         } catch (exception: CancellationException) {
             // Keep the same batch if cancellation races with the commit result.
             throw exception

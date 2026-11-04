@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import com.example.personalbookkeeping.data.ai.AiPhase
 import com.example.personalbookkeeping.ui.screens.AiBookkeepingScreen
+import com.example.personalbookkeeping.ui.screens.AiHistoryScreen
 import com.example.personalbookkeeping.ui.screens.AiSettingsScreen
 import com.example.personalbookkeeping.LedgerApplication
 import com.example.personalbookkeeping.data.transfer.ImportPreview
@@ -52,6 +53,7 @@ import com.example.personalbookkeeping.data.sync.ObjectStorageSyncManager
 import com.example.personalbookkeeping.data.sync.ObjectSyncResult
 import com.example.personalbookkeeping.data.sync.ObjectSyncState
 import com.example.personalbookkeeping.data.sync.ObjectSyncStatus
+import com.example.personalbookkeeping.domain.model.LedgerCategories
 import com.example.personalbookkeeping.domain.model.LedgerEntry
 import com.example.personalbookkeeping.domain.model.LedgerType
 import com.example.personalbookkeeping.ui.components.RecordFeedbackSnackbarHost
@@ -99,6 +101,7 @@ fun PersonalLedgerApp(
     )
     val aiState by aiViewModel.uiState.collectAsStateWithLifecycle()
     var showAi by rememberSaveable { mutableStateOf(false) }
+    var showAiHistory by rememberSaveable { mutableStateOf(false) }
     var showAiSettings by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -314,9 +317,10 @@ fun PersonalLedgerApp(
         exportFile(uri, LedgerFileFormat.JSON)
     }
 
-    BackHandler(enabled = showAi || showAiSettings || showEntry || pendingImport != null || showGitSettings || showObjectSettings || showObjectConflicts) {
+    BackHandler(enabled = showAi || showAiHistory || showAiSettings || showEntry || pendingImport != null || showGitSettings || showObjectSettings || showObjectConflicts) {
         when {
             showAiSettings -> if (!aiState.settingsBusy) showAiSettings = false
+            showAiHistory -> showAiHistory = false
             showAi -> if (aiState.phase != AiPhase.SAVING) {
                 aiViewModel.cancelRecognition()
                 showAi = false
@@ -346,6 +350,17 @@ fun PersonalLedgerApp(
                 onBack = { if (!aiState.settingsBusy) showAiSettings = false },
                 modifier = Modifier.fillMaxSize()
             )
+        } else if (showAiHistory) {
+            AiHistoryScreen(
+                history = aiState.history,
+                onBack = { showAiHistory = false },
+                onSeeLedger = {
+                    showAiHistory = false
+                    showAi = false
+                    selectedTab = LedgerTab.HISTORY
+                },
+                modifier = Modifier.fillMaxSize()
+            )
         } else if (showAi) {
             AiBookkeepingScreen(
                 state = aiState,
@@ -356,6 +371,7 @@ fun PersonalLedgerApp(
                 onCancel = aiViewModel::cancelRecognition,
                 onNewDraft = aiViewModel::newDraft,
                 onSeeLedger = { showAi = false; selectedTab = LedgerTab.HISTORY },
+                onHistory = { if (!aiState.busy) showAiHistory = true },
                 onBack = {
                     if (aiState.phase != AiPhase.SAVING) {
                         aiViewModel.cancelRecognition()
@@ -467,6 +483,7 @@ fun PersonalLedgerApp(
             EntryScreen(
                 initialType = entryType,
                 existing = editingEntry,
+                categoryCatalog = LedgerCategories.available(state.entries + listOfNotNull(editingEntry)),
                 onBack = {
                     showEntry = false
                     editingEntry = null
@@ -537,7 +554,11 @@ fun PersonalLedgerApp(
                             showEntry = true
                         },
                         onSeeLedger = { selectedTab = LedgerTab.HISTORY },
-                        onAiBookkeeping = { showAi = true },
+                        onAiBookkeeping = {
+                            aiViewModel.enterFromHome()
+                            showAiHistory = false
+                            showAi = true
+                        },
                         onEdit = { entry ->
                             editingEntry = entry
                             entryType = entry.type

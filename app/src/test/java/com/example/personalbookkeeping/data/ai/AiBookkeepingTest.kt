@@ -3,6 +3,7 @@ package com.example.personalbookkeeping.data.ai
 import com.example.personalbookkeeping.data.repository.ImportCommitResult
 import com.example.personalbookkeeping.data.repository.LedgerFilter
 import com.example.personalbookkeeping.data.repository.LedgerRepository
+import com.example.personalbookkeeping.domain.model.AiBatch
 import com.example.personalbookkeeping.domain.model.LedgerCategories
 import com.example.personalbookkeeping.domain.model.LedgerEntry
 import com.example.personalbookkeeping.domain.model.LedgerType
@@ -109,7 +110,7 @@ class AiBookkeepingTest {
     }
 
     @Test
-    fun `custom categories are separated by type with other fallback and only names leave device`() = runTest {
+    fun `custom categories are separated by type with new names preserved and only names leave device`() = runTest {
         val history = listOf(
             ledger("宠物", LedgerType.EXPENSE, "private-note-must-stay-local"),
             ledger("副业", LedgerType.INCOME), ledger("已删除分类", LedgerType.EXPENSE).copy(deletedAt = instant)
@@ -119,10 +120,10 @@ class AiBookkeepingTest {
         val manager = AiBookkeepingManager(configured, ChatCompletionsClient { _, incoming ->
             request = incoming
             envelope(listOf(record("10", "宠物", "猫粮"), record("20", "副业", "外快", "INCOME"),
-                record("1", "副业", "类型不匹配"), record("2", "模型新分类", "模糊项目")))
+                record("1", "副业", "类型不匹配"), record("2", "公益捐赠", "模糊项目")))
         }, repository, clock = clock)
         val result = manager.recognizeAndSave("本段文字") as AiBookkeepingResult.Saved
-        assertEquals(listOf("宠物", "副业", "其他", "其他"), result.entries.map { it.category })
+        assertEquals(listOf("宠物", "副业", "其他", "公益捐赠"), result.entries.map { it.category })
         assertTrue("宠物" in request!!.categories.getValue(LedgerType.EXPENSE))
         assertFalse("副业" in request!!.categories.getValue(LedgerType.EXPENSE))
         assertFalse("已删除分类" in request!!.categories.getValue(LedgerType.EXPENSE))
@@ -172,9 +173,17 @@ class AiBookkeepingTest {
         }, repository, clock = clock)
         assertEquals(AiBookkeepingResult.Failed(AiFailure.SAVE, true), manager.recognizeAndSave("鸡腿10晚饭20"))
         assertEquals(AiBookkeepingResult.Failed(AiFailure.SAVE, true), manager.recognizeAndSave("不得重新识别"))
+        val initial = repository.rows.values.toList()
+        val edited = initial[0].copy(amountFen = 2500, note = "更正鸡腿", updatedAt = instant.plusSeconds(1))
+        val deleted = initial[1].copy(deletedAt = instant.plusSeconds(2), updatedAt = instant.plusSeconds(2))
+        repository.rows[edited.id] = edited
+        repository.rows[deleted.id] = deleted
         val result = manager.retrySave() as AiBookkeepingResult.Saved
         assertEquals(1, apiCalls)
         assertEquals(repository.importCalls[0], repository.importCalls[1])
+        assertEquals(repository.batchCalls[0], repository.batchCalls[1])
+        assertEquals(repository.batchCalls[0].id, result.batchId)
+        assertEquals(listOf(edited, deleted), repository.rows.values.toList())
         assertEquals(2, repository.rows.size)
         assertEquals(ImportCommitResult(0, 2), result.commit)
         assertFalse(manager.hasPendingSave)
@@ -267,6 +276,9 @@ private class FakeAiConfiguration(private val credentials: AiCredentials? = null
 private class FakeRepository(initial: List<LedgerEntry> = emptyList()) : LedgerRepository {
     val rows = initial.associateByTo(linkedMapOf()) { it.id }
     val importCalls = mutableListOf<List<LedgerEntry>>()
+    data class BatchCall(val id: String, val savedAt: Instant, val entries: List<LedgerEntry>)
+    val batchCalls = mutableListOf<BatchCall>()
+    private val batches = linkedMapOf<String, BatchCall>()
     var failAfterFirstCommit = false
     var afterCommit: (suspend () -> Unit)? = null
     override suspend fun getAllActiveEntries() = rows.values.filter { it.deletedAt == null }
@@ -277,11 +289,20 @@ private class FakeRepository(initial: List<LedgerEntry> = emptyList()) : LedgerR
     override suspend fun save(entry: LedgerEntry) { error("AI must use batch import") }
     override suspend fun delete(id: String) { error("AI must not delete records") }
     override suspend fun applyRemoteEntriesAtomically(entries: List<LedgerEntry>) { error("AI must not replace the snapshot") }
-    override suspend fun importEntries(entries: List<LedgerEntry>): ImportCommitResult {
+    override fun observeAiBatches(): Flow<List<AiBatch>> = flowOf(emptyList())
+    override suspend fun importEntries(entries: List<LedgerEntry>): ImportCommitResult = error("AI must save ledger and membership together")
+    override suspend fun saveAiBatch(batchId: String, savedAt: Instant, entries: List<LedgerEntry>): ImportCommitResult {
         importCalls += entries.toList()
+        val call = BatchCall(batchId, savedAt, entries.toList())
+        batchCalls += call
+        batches[batchId]?.let { committed ->
+            check(committed.id == call.id && committed.savedAt == call.savedAt && committed.entries.map { it.id } == entries.map { it.id })
+            return ImportCommitResult(0, entries.size)
+        }
         check(entries.all { rows[it.id] == null || rows[it.id] == it })
         val newEntries = entries.filter { it.id !in rows }
         rows.putAll(newEntries.associateBy { it.id })
+        batches[batchId] = call
         afterCommit?.invoke()
         if (failAfterFirstCommit) {
             failAfterFirstCommit = false

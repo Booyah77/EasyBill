@@ -20,7 +20,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 | [Personal Ledger Sync Contract](./ledger-sync-contract.md) | Room import/export and manual Git sync contracts | Established |
-| [AI Bookkeeping Contract](./ai-bookkeeping-contract.md) | Configurable HTTPS model recognition, exact money, atomic batch saves and credentials | Established |
+| [AI Bookkeeping Contract](./ai-bookkeeping-contract.md) | Configurable HTTPS recognition, exact money, custom categories, atomic local AI history and credentials | Established |
 
 ---
 

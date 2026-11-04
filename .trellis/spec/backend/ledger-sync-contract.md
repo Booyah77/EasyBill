@@ -149,7 +149,7 @@ Correct: show both variants, wait for the user's choice, preserve the merge pare
 - Revision ID: lowercase SHA-256 of stable serialized payload excluding revisionId; include sorted parents. Decode must recompute the digest and match record ID and object key.
 - Use paginated ListObjectsV2, GetObject, and PutObject only. Do not depend on conditional writes or object deletion. Keep all revisions immutable.
 - Local sync metadata is keyed by storageId = SHA-256 of normalized endpoint, region, bucket, and prefix. Changing target never reuses another target's accepted heads or last-success time.
-- Room database version 2 adds object sync head and conflict tables through an explicit additive 1-to-2 migration. No destructive fallback is permitted.
+- Room version 2 added object sync head and conflict tables through an explicit additive 1-to-2 migration. Version 3 adds local AI batch membership with an additive 2-to-3 migration; retain both migrations and all existing ledger, tombstone, head and conflict data. No destructive fallback is permitted. Local AI membership must survive ledger snapshot replacement and never enters v1 file or sync payloads; see [AI Bookkeeping Contract](./ai-bookkeeping-contract.md).
 - Validate all remote object pages, schemas, digests, record IDs, parent existence, same-record ancestry, and graph cycles before uploading revisions or changing Room.
 - A first-time local record adopts an identical remote head; otherwise publish a root revision so a different same-ID record becomes a conflict.
 - After publishing local revisions, re-list and validate the full graph. Re-read after automatic joins. Apply only when the remote graph is stable; if it keeps changing, fail safely for a later manual retry.

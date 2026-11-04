@@ -1,5 +1,6 @@
 package com.example.personalbookkeeping.data.ai
 
+import com.example.personalbookkeeping.domain.model.LedgerCategories
 import com.example.personalbookkeeping.domain.model.LedgerEntry
 import com.example.personalbookkeeping.domain.model.LedgerType
 import java.math.BigDecimal
@@ -64,6 +65,9 @@ class AiResponseDecoder {
         val records = resultJson.decodeFromString<RecognitionPayload>(content).records
         require(records.isNotEmpty() && records.size <= MAX_AI_RECORDS)
         var total = 0L
+        val batchCategories = LedgerType.entries.associateWith { type ->
+            categories.getValue(type).toMutableList()
+        }
         records.map { record ->
             val type = LedgerType.valueOf(record.type)
             require(record.amount.length <= 30 && record.amount.matches(Regex("[0-9]+(?:\\.[0-9]{1,2})?")))
@@ -72,11 +76,8 @@ class AiResponseDecoder {
             total = Math.addExact(total, fen)
             require(record.date.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}")))
             val date = LocalDate.parse(record.date)
-            val allowed = categories.getValue(type)
-            require("其他" in allowed)
-            val category = record.category.takeIf { it in allowed }
-                ?: record.category.trim().takeIf { it in allowed }
-                ?: "其他"
+            val category = LedgerCategories.resolve(type, record.category, batchCategories)
+            if (category !in batchCategories.getValue(type)) batchCategories.getValue(type).add(category)
             val note = record.note.trim()
             require(note.isNotBlank() && note.length <= 500 && note.none { it == '\u0000' })
             LedgerEntry(

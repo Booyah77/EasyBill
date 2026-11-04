@@ -1,8 +1,10 @@
 package com.example.personalbookkeeping.data.repository
 
+import com.example.personalbookkeeping.domain.model.AiBatch
 import com.example.personalbookkeeping.domain.model.LedgerEntry
 import com.example.personalbookkeeping.domain.model.LedgerType
 import com.example.personalbookkeeping.domain.model.MonthlyTotals
+import java.time.Instant
 import java.time.YearMonth
 import kotlinx.coroutines.flow.Flow
 
@@ -27,4 +29,6 @@ interface LedgerRepository {
     suspend fun save(entry: LedgerEntry)
     suspend fun delete(id: String)
     suspend fun importEntries(entries: List<LedgerEntry>): ImportCommitResult
+    suspend fun saveAiBatch(batchId: String, savedAt: Instant, entries: List<LedgerEntry>): ImportCommitResult
+    fun observeAiBatches(): Flow<List<AiBatch>>
 }

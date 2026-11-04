@@ -1,10 +1,12 @@
 package com.example.personalbookkeeping.data.repository
 
 import androidx.room.withTransaction
+import com.example.personalbookkeeping.data.local.AiBatchEntryEntity
 import com.example.personalbookkeeping.data.local.LedgerDatabase
 import com.example.personalbookkeeping.data.local.LedgerEntryDao
 import com.example.personalbookkeeping.data.local.toDomain
 import com.example.personalbookkeeping.data.local.toEntity
+import com.example.personalbookkeeping.domain.model.AiBatch
 import com.example.personalbookkeeping.domain.model.LedgerEntry
 import com.example.personalbookkeeping.domain.model.MonthlyTotals
 import java.time.Instant
@@ -77,6 +79,40 @@ class RoomLedgerRepository(
     override suspend fun delete(id: String) {
         val now = Instant.now().toString()
         check(dao.markDeleted(id, now) == 1) { "Active entry was not found" }
+    }
+
+    override fun observeAiBatches(): Flow<List<AiBatch>> =
+        database.aiBatchEntryDao().observeBatchesWithCurrentEntries().map { rows ->
+            rows.groupBy { it.membership.batchId }.map { (id, members) ->
+                AiBatch(
+                    id = id,
+                    savedAt = Instant.parse(members.first().membership.batchSavedAt),
+                    originalCount = members.size,
+                    entries = members.mapNotNull { it.entry?.takeIf { row -> row.deletedAt == null }?.toDomain() }
+                )
+            }.sortedWith(compareByDescending<AiBatch> { it.savedAt }.thenByDescending { it.id })
+        }
+
+    override suspend fun saveAiBatch(
+        batchId: String,
+        savedAt: Instant,
+        entries: List<LedgerEntry>
+    ): ImportCommitResult = database.withTransaction {
+        require(batchId.isNotBlank() && entries.isNotEmpty()) { "AI batch must have an identity and entries" }
+        require(entries.map { it.id }.distinct().size == entries.size) { "AI batch contains duplicate entry IDs" }
+        val membership = entries.mapIndexed { position, entry ->
+            AiBatchEntryEntity(entry.id, batchId, savedAt.toString(), position)
+        }
+        val historyDao = database.aiBatchEntryDao()
+        val existing = historyDao.getBatchMembership(batchId)
+        if (existing.isNotEmpty()) {
+            if (existing != membership) throw ImportConflictException("AI batch identity has conflicting membership")
+            // Current ledger values may have been edited, deleted or replaced since an uncertain commit.
+            return@withTransaction ImportCommitResult(0, entries.size)
+        }
+        val commit = importEntries(entries)
+        historyDao.insertAll(membership)
+        commit
     }
 
     override suspend fun importEntries(entries: List<LedgerEntry>): ImportCommitResult = database.withTransaction {

@@ -17,7 +17,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.personalbookkeeping.ui.theme.LedgerColors
@@ -41,6 +47,8 @@ fun SettingsScreen(
     onSyncObject: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showFormatHelp by rememberSaveable { mutableStateOf(false) }
+    if (showFormatHelp) FileFormatHelpDialog(onDismiss = { showFormatHelp = false })
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -70,7 +78,10 @@ fun SettingsScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("数据文件", color = LedgerColors.Ink, style = MaterialTheme.typography.titleMedium)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("数据文件", modifier = Modifier.weight(1f), color = LedgerColors.Ink, style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = { showFormatHelp = true }) { Text("格式说明") }
+            }
             Text(
                 text = "CSV 和 JSON 使用本软件固定格式，导出的文件可以重新导入。",
                 color = LedgerColors.MutedInk,

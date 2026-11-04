@@ -33,9 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.example.personalbookkeeping.data.ai.AiPhase
 import com.example.personalbookkeeping.data.ai.AiFailure
 import com.example.personalbookkeeping.data.ai.MAX_AI_INPUT_CHARS
-import com.example.personalbookkeeping.domain.model.LedgerType
 import com.example.personalbookkeeping.ui.AiUiState
-import com.example.personalbookkeeping.ui.components.formatFen
 import com.example.personalbookkeeping.ui.theme.LedgerColors
 
 @Composable
@@ -48,6 +46,7 @@ fun AiBookkeepingScreen(
     onCancel: () -> Unit,
     onNewDraft: () -> Unit,
     onSeeLedger: () -> Unit,
+    onHistory: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -60,38 +59,36 @@ fun AiBookkeepingScreen(
             IconButton(onClick = onBack, enabled = state.phase != AiPhase.SAVING) {
                 Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
             }
-            Text("AI 记账", color = LedgerColors.Ink, style = MaterialTheme.typography.headlineSmall)
+            Text("AI 记账", modifier = Modifier.weight(1f), color = LedgerColors.Ink, style = MaterialTheme.typography.headlineSmall)
+            TextButton(onClick = onHistory, enabled = !state.busy) { Text("历史记录") }
         }
-        if (state.savedEntries.isNotEmpty()) {
+        if (state.currentBatchId != null) {
+            val batch = state.history.firstOrNull { it.id == state.currentBatchId }
             Surface(color = LedgerColors.SoftGreen, shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("已记入账本 ${state.savedEntries.size} 笔", color = LedgerColors.Income, style = MaterialTheme.typography.titleLarge)
-                    val income = state.savedEntries.filter { it.type == LedgerType.INCOME }.sumOf { it.amountFen }
-                    val expense = state.savedEntries.filter { it.type == LedgerType.EXPENSE }.sumOf { it.amountFen }
-                    Text("合计 ¥${formatFen(income + expense)} · 支出 ¥${formatFen(expense)} · 收入 ¥${formatFen(income)}",
-                        color = LedgerColors.Ink, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-            state.savedEntries.forEach { entry ->
-                Surface(color = LedgerColors.Surface, shape = RoundedCornerShape(16.dp)) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val isIncome = entry.type == LedgerType.INCOME
-                        Text("${if (isIncome) "收入" else "支出"} · ${entry.category} · ¥${formatFen(entry.amountFen)}",
-                            color = if (isIncome) LedgerColors.Income else LedgerColors.Expense,
-                            style = MaterialTheme.typography.titleMedium)
-                        Text(entry.note, color = LedgerColors.Ink, style = MaterialTheme.typography.bodyLarge)
-                        Text(entry.date.toString(), color = LedgerColors.MutedInk, style = MaterialTheme.typography.bodyMedium)
+                    Text(aiBatchResultTitle(batch), color = LedgerColors.Income, style = MaterialTheme.typography.titleLarge)
+                    when {
+                        batch == null -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        batch.entries.isEmpty() -> Text("本次保存批次仍保留在历史记录中，可以继续记下一段。", color = LedgerColors.MutedInk)
+                        else -> Text("当前保留 ${batch.entries.size} 笔 · ${aiBatchTotalText(batch.entries)}",
+                            color = LedgerColors.Ink, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
+            batch?.entries?.forEach { entry -> AiEntryDetail(entry) }
             Text("如需更正，可到流水中编辑或删除。", color = LedgerColors.MutedInk)
             Button(onClick = onNewDraft, modifier = Modifier.fillMaxWidth()) { Text("再记一段") }
             OutlinedButton(onClick = onSeeLedger, modifier = Modifier.fillMaxWidth()) { Text("查看流水") }
         } else {
-            Text("把几笔收支写在一起，一次识别并自动保存。", color = LedgerColors.Ink,
+            Text("像平时说话一样，写下做了什么、花了或收了多少钱。", color = LedgerColors.Ink,
                 style = MaterialTheme.typography.titleMedium)
-            Text("例如：鸡腿10元晚上吃饭20手机壳10元", color = LedgerColors.MutedInk,
-                style = MaterialTheme.typography.bodyMedium)
+            Surface(color = LedgerColors.Surface, shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("例如", color = LedgerColors.MutedInk, style = MaterialTheme.typography.labelLarge)
+                    Text("今天午饭花了28元，地铁4元，买水果16.5元。", color = LedgerColors.Ink)
+                    Text("昨天买书花了45元，今天收到工资8000元。", color = LedgerColors.Ink)
+                }
+            }
             OutlinedTextField(
                 value = state.draft,
                 onValueChange = { if (it.length <= MAX_AI_INPUT_CHARS) onDraftChange(it) },
@@ -102,7 +99,7 @@ fun AiBookkeepingScreen(
                 supportingText = { Text("${state.draft.length}/$MAX_AI_INPUT_CHARS") },
                 modifier = Modifier.fillMaxWidth()
             )
-            Text("点击后，本次文字、可用分类名称和当前日期会发送到你配置的大模型服务，可能消耗 API 额度。默认按今天的支出记账，只支持人民币。",
+            Text("识别通过后会自动保存。本次文字、分类名称和当前日期会发送到你配置的大模型服务，可能消耗 API 额度。仅支持人民币。",
                 color = LedgerColors.MutedInk, style = MaterialTheme.typography.bodySmall)
             if (!state.loadingSettings && state.settings == null) {
                 Text("尚未配置大模型。保存设置后会回到这段草稿。", color = LedgerColors.MutedInk)

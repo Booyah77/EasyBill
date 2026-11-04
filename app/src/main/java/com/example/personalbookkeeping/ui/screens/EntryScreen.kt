@@ -2,6 +2,8 @@ package com.example.personalbookkeeping.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -46,6 +48,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.personalbookkeeping.domain.model.LedgerCategories
 import com.example.personalbookkeeping.domain.model.LedgerEntry
 import com.example.personalbookkeeping.domain.model.LedgerType
 import com.example.personalbookkeeping.ui.theme.LedgerColors
@@ -60,13 +63,14 @@ private val EXPENSE_CATEGORIES = com.example.personalbookkeeping.domain.model.Le
 private val INCOME_CATEGORIES = com.example.personalbookkeeping.domain.model.LedgerCategories.income
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 fun EntryScreen(
     initialType: LedgerType,
     existing: LedgerEntry?,
     onBack: () -> Unit,
     onSave: suspend (LedgerType, Long, LocalDate, String, String, LedgerEntry?) -> Unit,
     onDelete: suspend (LedgerEntry) -> Unit,
+    categoryCatalog: Map<LedgerType, List<String>> = LedgerCategories.available(listOfNotNull(existing)),
     modifier: Modifier = Modifier
 ) {
     var type by rememberSaveable(existing?.id) { mutableStateOf(existing?.type ?: initialType) }
@@ -83,7 +87,7 @@ fun EntryScreen(
     var saving by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     val isExistingCategoryCustom = existing != null &&
-        existing.category !in com.example.personalbookkeeping.domain.model.LedgerCategories.defaults(existing.type)
+        existing.category !in LedgerCategories.defaults(existing.type)
     var showCustomCategory by rememberSaveable(existing?.id) { mutableStateOf(isExistingCategoryCustom) }
     var customCategory by rememberSaveable(existing?.id) {
         mutableStateOf(if (isExistingCategoryCustom) existing!!.category else "")
@@ -125,16 +129,26 @@ fun EntryScreen(
             FilterChip(
                 selected = type == LedgerType.EXPENSE,
                 onClick = {
-                    type = LedgerType.EXPENSE
-                    if (category !in EXPENSE_CATEGORIES) category = defaultCategory(LedgerType.EXPENSE)
+                    if (type != LedgerType.EXPENSE) {
+                        type = LedgerType.EXPENSE
+                        category = defaultCategory(type)
+                        showCustomCategory = false
+                        customCategory = ""
+                        saveError = null
+                    }
                 },
                 label = { Text("支出") }
             )
             FilterChip(
                 selected = type == LedgerType.INCOME,
                 onClick = {
-                    type = LedgerType.INCOME
-                    if (category !in INCOME_CATEGORIES) category = defaultCategory(LedgerType.INCOME)
+                    if (type != LedgerType.INCOME) {
+                        type = LedgerType.INCOME
+                        category = defaultCategory(type)
+                        showCustomCategory = false
+                        customCategory = ""
+                        saveError = null
+                    }
                 },
                 label = { Text("收入") }
             )
@@ -166,25 +180,13 @@ fun EntryScreen(
 
         Column {
             Text("分类", color = LedgerColors.MutedInk, style = MaterialTheme.typography.bodyMedium)
-            Row(
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                categories.take(4).forEach { option ->
-                    FilterChip(
-                        selected = category == option,
-                        onClick = {
-                            category = option
-                            showCustomCategory = false
-                        },
-                        label = { Text(option) }
-                    )
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.drop(4).forEach { option ->
+                categories.forEach { option ->
                     FilterChip(
                         selected = category == option && !showCustomCategory,
                         onClick = {
@@ -203,11 +205,12 @@ fun EntryScreen(
             if (showCustomCategory) {
                 OutlinedTextField(
                     value = customCategory,
-                    onValueChange = { customCategory = it },
+                    onValueChange = { customCategory = it; saveError = null },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 4.dp),
                     label = { Text("分类名称") },
+                    supportingText = { Text("新分类限 1～20 个字，已有分类可原样保留") },
                     singleLine = true
                 )
             }
@@ -247,11 +250,14 @@ fun EntryScreen(
         Spacer(Modifier.height(4.dp))
         Button(
             onClick = {
-                val resolvedCategory = if (showCustomCategory) customCategory.trim() else category
+                val rawCategory = if (showCustomCategory) customCategory else category
+                val resolvedCategory = runCatching {
+                    LedgerCategories.resolve(type, rawCategory, categoryCatalog)
+                }.getOrNull()
                 if (parsedAmountFen == null) {
                     amountError = "请输入大于 0 且最多两位小数的金额"
-                } else if (resolvedCategory.isBlank()) {
-                    saveError = "请选择或填写分类"
+                } else if (resolvedCategory == null) {
+                    saveError = LedgerCategories.NEW_NAME_HINT
                 } else {
                     saving = true
                     keyboard?.hide()

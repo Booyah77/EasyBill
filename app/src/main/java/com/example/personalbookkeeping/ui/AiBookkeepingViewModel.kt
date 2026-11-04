@@ -15,6 +15,7 @@ import com.example.personalbookkeeping.data.ai.AiSettings
 import com.example.personalbookkeeping.data.ai.AiSettingsStore
 import com.example.personalbookkeeping.data.ai.HttpsChatCompletionsClient
 import com.example.personalbookkeeping.data.repository.LedgerRepository
+import com.example.personalbookkeeping.domain.model.AiBatch
 import com.example.personalbookkeeping.domain.model.LedgerEntry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -34,25 +35,47 @@ data class AiUiState(
     val settingsError: AiFailure? = null,
     val error: AiFailure? = null,
     val canRetrySave: Boolean = false,
-    val savedEntries: List<LedgerEntry> = emptyList()
+    val savedEntries: List<LedgerEntry> = emptyList(),
+    val history: List<AiBatch> = emptyList(),
+    val currentBatchId: String? = null
 ) {
     val busy: Boolean get() = phase != AiPhase.IDLE
 }
 
-class AiBookkeepingViewModel(
+class AiBookkeepingViewModel internal constructor(
     private val savedState: SavedStateHandle,
-    private val settingsStore: AiSettingsStore,
-    repository: LedgerRepository
+    repository: LedgerRepository,
+    private val manager: AiBookkeepingManager,
+    private val loadSettings: suspend () -> AiSettings?,
+    private val writeSettings: suspend (AiSettings, String) -> Unit,
+    private val removeSettings: suspend () -> Unit
 ) : ViewModel() {
-    private val manager = AiBookkeepingManager(settingsStore, HttpsChatCompletionsClient(), repository)
+    constructor(savedState: SavedStateHandle, settingsStore: AiSettingsStore, repository: LedgerRepository) : this(
+        savedState,
+        repository,
+        AiBookkeepingManager(settingsStore, HttpsChatCompletionsClient(), repository),
+        { settingsStore.loadSettings() },
+        { settings, key -> settingsStore.save(settings, key) },
+        { settingsStore.clear() }
+    )
     private val mutableState = MutableStateFlow(AiUiState(draft = savedState["ai_draft"] ?: ""))
     val uiState = mutableState.asStateFlow()
     private var operation: Job? = null
 
     init {
         viewModelScope.launch {
+            repository.observeAiBatches().collect { history ->
+                mutableState.update { state ->
+                    state.copy(
+                        history = history,
+                        savedEntries = history.firstOrNull { it.id == state.currentBatchId }?.entries.orEmpty()
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
             try {
-                val settings = withContext(Dispatchers.IO) { settingsStore.loadSettings() }
+                val settings = withContext(Dispatchers.IO) { loadSettings() }
                 mutableState.update { it.copy(settings = settings, loadingSettings = false) }
             } catch (exception: AiException) {
                 mutableState.update { it.copy(settingsError = exception.failure, loadingSettings = false) }
@@ -87,7 +110,11 @@ class AiBookkeepingViewModel(
                     is AiBookkeepingResult.Saved -> {
                         savedState["ai_draft"] = ""
                         mutableState.update {
-                            it.copy(draft = "", savedEntries = result.entries, error = null, canRetrySave = false)
+                            it.copy(
+                                draft = "", currentBatchId = result.batchId,
+                                savedEntries = it.history.firstOrNull { batch -> batch.id == result.batchId }?.entries.orEmpty(),
+                                error = null, canRetrySave = false
+                            )
                         }
                     }
                     is AiBookkeepingResult.Failed -> mutableState.update {
@@ -108,10 +135,15 @@ class AiBookkeepingViewModel(
         if (uiState.value.phase == AiPhase.RECOGNIZING) operation?.cancel()
     }
 
+    fun enterFromHome() {
+        if (uiState.value.busy || uiState.value.canRetrySave || manager.hasPendingSave || operation?.isActive == true) return
+        savedState["ai_draft"] = ""
+        mutableState.update { it.copy(draft = "", currentBatchId = null, savedEntries = emptyList(), error = null) }
+    }
+
     fun newDraft() {
-        if (!uiState.value.busy && !uiState.value.canRetrySave) {
-            mutableState.update { it.copy(savedEntries = emptyList(), error = null) }
-        }
+        if (uiState.value.busy || uiState.value.canRetrySave || manager.hasPendingSave || operation?.isActive == true) return
+        mutableState.update { it.copy(currentBatchId = null, savedEntries = emptyList(), error = null) }
     }
 
     fun saveSettings(settings: AiSettings, key: String, onSaved: () -> Unit) {
@@ -119,7 +151,7 @@ class AiBookkeepingViewModel(
         mutableState.update { it.copy(settingsBusy = true, settingsError = null) }
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { settingsStore.save(settings, key) }
+                withContext(Dispatchers.IO) { writeSettings(settings, key) }
                 mutableState.update { it.copy(settings = settings, settingsError = null, error = null) }
                 onSaved()
             } catch (exception: CancellationException) {
@@ -137,7 +169,7 @@ class AiBookkeepingViewModel(
         mutableState.update { it.copy(settingsBusy = true, settingsError = null) }
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { settingsStore.clear() }
+                withContext(Dispatchers.IO) { removeSettings() }
                 mutableState.update { it.copy(settings = null, error = null) }
                 onCleared()
             } catch (exception: CancellationException) {
